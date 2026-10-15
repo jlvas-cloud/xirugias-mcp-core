@@ -80,6 +80,11 @@ test('no token → 401 with resource metadata; wrong audience → 401; GET → 4
     const jwt = require('jsonwebtoken');
     const appToken = jwt.sign({ _id: 'u1', companyId: 'c1' }, 'test-secret');
     assert.equal((await rpc(app, appToken, 'tools/list')).status, 401);
+    // a token minted by ANOTHER app's MCP with the same secret: wrong issuer / scope
+    const otherApp = jwt.sign({ sub: 'u1', co: 'c1', cid: 'x', tv: 0, scope: 'other:read', aud: 'mcp' }, 'test-secret', { issuer: 'http://localhost:4000' });
+    assert.equal((await rpc(app, otherApp, 'tools/list')).status, 401);
+    const wrongScope = jwt.sign({ sub: 'u1', co: 'c1', cid: 'x', tv: 0, scope: 'other:read', aud: 'mcp' }, 'test-secret', { issuer: 'http://localhost:3999' });
+    assert.equal((await rpc(app, wrongScope, 'tools/list')).status, 401);
     const get = await request(app).get('/mcp');
     assert.equal(get.status, 405);
     assert.equal(get.headers.allow, 'POST');
@@ -190,4 +195,9 @@ test('full OAuth flow: register → login page → code → tokens → refresh �
     // revoking the connection from the app cuts the still-valid access token
     stores.connections.rows[0].revokedAt = new Date();
     assert.equal((await rpc(app, res.body.access_token, 'tools/list')).status, 401);
+    // with checkConnection, a token that carries no connection id is never accepted
+    const { core } = build({ checkConnection: true });
+    const noCn = core.signAccessToken({ userId: 'u1', companyId: 'c1', email: 'x', clientId: 'c', scopes: ['test:read'], tokenVersion: 0 });
+    assert.equal((await rpc(app, noCn, 'tools/list')).status, 401);
+    assert.ok((await request(app).post('/register').send({ client_name: 'bad', redirect_uris: ['http://evil.example/cb'], token_endpoint_auth_method: 'none' })).status === 400, 'metadata error is a 400');
 });

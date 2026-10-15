@@ -1,6 +1,6 @@
 {
   "name": "xirugias-mcp-core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shared MCP endpoint for the Xirugias apps: OAuth 2.1 on the Xirugias login, bearer auth, stateless Streamable HTTP transport, audit log. Each app supplies its own tools, scoping and stores.",
   "main": "index.js",
   "license": "UNLICENSED",

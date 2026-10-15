@@ -14,12 +14,22 @@ its own OAuth records and audit rows.
 No registry. Pin a tag from GitHub in the app's `package.json`:
 
 ```json
-"xirugias-mcp-core": "github:jlvas-cloud/xirugias-mcp-core#v0.1.0"
+"xirugias-mcp-core": "github:jlvas-cloud/xirugias-mcp-core#v0.1.1"
 ```
 
-Private repo on Heroku/Railway: set a read-only GitHub token in the build
-environment and use the URL form
-`git+https://${GITHUB_TOKEN}@github.com/jlvas-cloud/xirugias-mcp-core.git#v0.1.0`.
+The lockfile records the dependency as `git+ssh://git@github.com/...`, which a
+Heroku/Railway build cannot clone unless the repo is **public** (npm then
+falls back to the GitHub tarball). For a private repo, give the build a
+read-only GitHub token (`GITHUB_TOKEN` config var) and rewrite the URL
+before `npm ci` with a `heroku-prebuild` script in the app's root
+`package.json`:
+
+```json
+"heroku-prebuild": "git config --global url.\"https://${GITHUB_TOKEN}@github.com/\".insteadOf \"ssh://git@github.com/\""
+```
+
+(`${VAR}` expands in a shell script, not in a package.json dependency
+spec — never put the token in the spec itself.)
 
 Peer dependencies: the app's `express` (>=4.16) and `mongoose` (>=7).
 

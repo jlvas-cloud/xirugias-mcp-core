@@ -23,7 +23,7 @@ const { createBearerAuth } = require('./lib/auth');
 const { createMcpServerFactory, ToolError, READ_ONLY_ANNOTATIONS } = require('./lib/server');
 const { createOAuthRouter, createMcpRouter, clientIp } = require('./lib/routers');
 
-const REQUIRED = ['issuerUrl', 'stores', 'authenticate', 'loadPrincipal', 'tools'];
+const REQUIRED = ['issuerUrl', 'stores', 'authenticate', 'loadPrincipal', 'tools', 'server'];
 
 function envNumber(name, fallback) {
     const n = Number(process.env[name]);
@@ -76,6 +76,7 @@ function createMcpCore(o) {
         jwtSecret,
         issuerUrl: o.issuerUrl,
         realm: o.realm || `${appKey}-mcp`,
+        scopes,
         accessPermission,
         inactiveMessage: o.inactiveMessage,
         loadPrincipal: o.loadPrincipal,
