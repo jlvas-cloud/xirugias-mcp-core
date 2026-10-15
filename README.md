@@ -14,7 +14,7 @@ its own OAuth records and audit rows.
 No registry. Pin a tag from GitHub in the app's `package.json`:
 
 ```json
-"xirugias-mcp-core": "github:jlvas-cloud/xirugias-mcp-core#v0.1.1"
+"xirugias-mcp-core": "github:jlvas-cloud/xirugias-mcp-core#v0.1.2"
 ```
 
 The lockfile records the dependency as `git+ssh://git@github.com/...`, which a
@@ -76,6 +76,13 @@ Environment read at mount time: `MCP_RATE_LIMIT_PER_MIN` (default 240 per
 user), `MCP_AUTH_RATE_LIMIT_PER_15MIN` (default 60 per IP on login, register
 and token). `JWT_SECRET` is read on every sign/verify unless `jwtSecret` is
 given.
+
+## Smoke-testing against a running server
+
+Access tokens carry `iss` = the server's issuer URL. A token minted locally
+(an app's `signAccessToken`, e.g. the tenant's `scripts/mcpSmokeTest.js --email`)
+is accepted only if the minting process uses the same issuer: set
+`MCP_ISSUER_URL` to the target server's public URL when minting.
 
 ## Tests
 

@@ -199,5 +199,8 @@ test('full OAuth flow: register → login page → code → tokens → refresh �
     const { core } = build({ checkConnection: true });
     const noCn = core.signAccessToken({ userId: 'u1', companyId: 'c1', email: 'x', clientId: 'c', scopes: ['test:read'], tokenVersion: 0 });
     assert.equal((await rpc(app, noCn, 'tools/list')).status, 401);
+    const badCn = core.signAccessToken({ userId: 'u1', companyId: 'c1', email: 'x', clientId: 'c', scopes: ['test:read'], tokenVersion: 0, connectionId: 'not-an-id' });
+    stores.connections.findById = () => { throw new Error('CastError'); };
+    assert.equal((await rpc(app, badCn, 'tools/list')).status, 401);
     assert.ok((await request(app).post('/register').send({ client_name: 'bad', redirect_uris: ['http://evil.example/cb'], token_endpoint_auth_method: 'none' })).status === 400, 'metadata error is a 400');
 });
