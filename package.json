@@ -1,0 +1,38 @@
+{
+  "name": "xirugias-mcp-core",
+  "version": "0.1.0",
+  "description": "Shared MCP endpoint for the Xirugias apps: OAuth 2.1 on the Xirugias login, bearer auth, stateless Streamable HTTP transport, audit log. Each app supplies its own tools, scoping and stores.",
+  "main": "index.js",
+  "license": "UNLICENSED",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jlvas-cloud/xirugias-mcp-core.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/core.test.js"
+  },
+  "files": [
+    "index.js",
+    "lib/",
+    "README.md"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "cors": "^2.8.5",
+    "express-rate-limit": "^8.7.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "peerDependencies": {
+    "express": ">=4.16",
+    "mongoose": ">=7"
+  },
+  "devDependencies": {
+    "express": "^4.21.2",
+    "mongoose": "^8.0.3",
+    "supertest": "^7.1.0"
+  }
+}
