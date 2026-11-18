@@ -6,15 +6,15 @@ Streamable HTTP transport, rate limits, result truncation and an audit log.
 Each app supplies only what differs: its tools, its scoping rules, its
 stores and the wording of the login page.
 
-Read-only by design: the core never writes app data; the only writes are
-its own OAuth records and audit rows.
+The core never writes app data; the only writes are its own OAuth records
+and audit rows. Whether tools read or write is the app's choice.
 
 ## Install
 
 No registry. Pin a tag from GitHub in the app's `package.json`:
 
 ```json
-"xirugias-mcp-core": "github:jlvas-cloud/xirugias-mcp-core#v0.1.2"
+"xirugias-mcp-core": "github:jlvas-cloud/xirugias-mcp-core#v0.2.0"
 ```
 
 The lockfile records the dependency as `git+ssh://git@github.com/...`, which a
@@ -31,7 +31,8 @@ before `npm ci` with a `heroku-prebuild` script in the app's root
 (`${VAR}` expands in a shell script, not in a package.json dependency
 spec — never put the token in the spec itself.)
 
-Peer dependencies: the app's `express` (>=4.16) and `mongoose` (>=7).
+Peer dependencies: the app's `express` (>=4.16) and, only when the app uses
+the bundled `schemas`, `mongoose` (>=7).
 
 ## Use
 
@@ -60,6 +61,37 @@ const core = createMcpCore({
 app.use(core.oauthRouter());           // at the root: /.well-known, /authorize, /token, /register, /revoke, /oauth/login
 app.use('/mcp', core.mcpRouter());     // before the SPA catch-all
 ```
+
+### Session mode (apps that keep no passwords)
+
+An app that already signs its staff in by itself (for example "Entrar con
+Xirugias", OpenID Connect on the identity hub) passes `sessionLogin` instead
+of `authenticate`:
+
+```js
+sessionLogin: {
+    // the person as the app sees them on this request: a principal,
+    // { error: 'message' } (shown, no form), or null when not signed in
+    currentPrincipal: async (req, res) => principal | { error } | null,
+    // the app's own sign-in, which must come back to returnTo (a path)
+    loginUrl: returnTo => `/auth/login?next=${encodeURIComponent(returnTo)}`
+}
+```
+
+`/authorize` then sends a person without a session to `loginUrl` and back to
+the same authorization request, and shows a signed-in person a consent page
+("<agent> quiere usar <app> en tu nombre", Permitir / Cancelar). `POST
+/oauth/consent` re-reads the session, checks a 10-minute anti-forgery token
+bound to the person and to the exact request, and issues the code (or
+returns `error=access_denied`). The page is never framable. `POST
+/oauth/login` answers 404 in this mode. Extra copy keys: `signedInAs(who)`,
+`allowButton`, `denyButton`.
+
+Write tools: a tool definition may carry its own MCP `annotations`
+(`readOnlyHint: false`, …); without them a tool is annotated read-only.
+
+Apps with their own stores (no mongoose) never load the schemas:
+`schemas` is read lazily.
 
 A principal is whatever `loadPrincipal` returns. The core reads `userId`,
 `companyId`, `email`, `name`, `deactivated`, `tokenVersion` (0 when the app
