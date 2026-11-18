@@ -5,8 +5,8 @@
  *   app.use(core.oauthRouter());        // at the root (discovery documents)
  *   app.use('/mcp', core.mcpRouter());  // before the SPA catch-alls
  *
- * What the app supplies: how to check a password and the access permission
- * (`authenticate`), how to re-read a user (`loadPrincipal`), where the
+ * What the app supplies: how to sign the person in — a password check plus
+ * the access permission (`authenticate`), or its own session (`sessionLogin`) — how to re-read a user (`loadPrincipal`), where the
  * OAuth clients/codes/connections and the audit log live (`stores`), and
  * its tools, resources and instructions. Everything else — OAuth 2.1 with
  * dynamic registration and PKCE, bearer auth, stateless Streamable HTTP,
@@ -17,13 +17,12 @@
  * (0 when the app has none), canUseAgentes. Anything else is the app's
  * scoping data and is passed through to `tools.execute`.
  */
-const schemas = require('./lib/schemas');
 const { createOAuth, escapeHtml, DEFAULT_LOGIN_PAGE } = require('./lib/oauth');
 const { createBearerAuth } = require('./lib/auth');
 const { createMcpServerFactory, ToolError, READ_ONLY_ANNOTATIONS } = require('./lib/server');
 const { createOAuthRouter, createMcpRouter, clientIp } = require('./lib/routers');
 
-const REQUIRED = ['issuerUrl', 'stores', 'authenticate', 'loadPrincipal', 'tools', 'server'];
+const REQUIRED = ['issuerUrl', 'stores', 'loadPrincipal', 'tools', 'server'];
 
 function envNumber(name, fallback) {
     const n = Number(process.env[name]);
@@ -39,7 +38,8 @@ function envNumber(name, fallback) {
  * @param {string} [o.realm]                WWW-Authenticate realm
  * @param {string} o.accessPermission       name of the app permission that opens the MCP
  * @param {object} o.stores                 { clients(), authCodes(), connections(), auditLog(companyId) } → Promise<Model>
- * @param {Function} o.authenticate         (email, password) → {principal} | {error}
+ * @param {Function} [o.authenticate]       password mode: (email, password) → {principal} | {error}
+ * @param {object} [o.sessionLogin]         session mode (no passwords): { currentPrincipal(req, res), loginUrl(returnTo) }
  * @param {Function} o.loadPrincipal        (userId, companyId) → principal | null
  * @param {boolean} [o.checkConnection]     re-read the connection on every call (apps without tokenVersion)
  * @param {object} [o.loginPage]            copy for the login page
@@ -50,6 +50,10 @@ function envNumber(name, fallback) {
 function createMcpCore(o) {
     for (const key of REQUIRED) {
         if (!o || o[key] == null) throw new Error(`createMcpCore: option "${key}" is required`);
+    }
+    if (!o.authenticate === !o.sessionLogin) throw new Error('createMcpCore: give exactly one of "authenticate" (password mode) or "sessionLogin" (session mode)');
+    if (o.sessionLogin && (typeof o.sessionLogin.currentPrincipal !== 'function' || typeof o.sessionLogin.loginUrl !== 'function')) {
+        throw new Error('createMcpCore: sessionLogin needs currentPrincipal(req, res) and loginUrl(returnTo)');
     }
     const appKey = (o.server && o.server.name) || 'app';
     const jwtSecret = o.jwtSecret || (() => {
@@ -65,6 +69,7 @@ function createMcpCore(o) {
         scopes,
         stores: o.stores,
         authenticate: o.authenticate,
+        sessionLogin: o.sessionLogin,
         loadPrincipal: o.loadPrincipal,
         loginPage: o.loginPage,
         accessTokenTtlSec: o.accessTokenTtlSec,
@@ -120,6 +125,7 @@ function createMcpCore(o) {
         oauthRouter: () => createOAuthRouter({
             provider: oauth.provider,
             handleLogin: oauth.handleLogin,
+            handleConsent: o.sessionLogin ? oauth.handleConsent : null,
             issuerUrl: o.issuerUrl,
             scopes,
             resourceName: o.resourceName || appKey,
@@ -133,4 +139,7 @@ function createMcpCore(o) {
     };
 }
 
-module.exports = { createMcpCore, ToolError, schemas, escapeHtml, clientIp, READ_ONLY_ANNOTATIONS, DEFAULT_LOGIN_PAGE };
+module.exports = { createMcpCore, ToolError, escapeHtml, clientIp, READ_ONLY_ANNOTATIONS, DEFAULT_LOGIN_PAGE };
+// Mongoose schemas, loaded on first use: an app with its own stores (no
+// mongoose) never needs the peer dependency.
+Object.defineProperty(module.exports, 'schemas', { enumerable: true, get: () => require('./lib/schemas') });
