@@ -55,6 +55,11 @@ function createMcpCore(o) {
     if (o.sessionLogin && (typeof o.sessionLogin.currentPrincipal !== 'function' || typeof o.sessionLogin.loginUrl !== 'function')) {
         throw new Error('createMcpCore: sessionLogin needs currentPrincipal(req, res) and loginUrl(returnTo)');
     }
+    // the default consent copy says "solo lectura": an app with write tools must say what it does
+    const writes = (o.tools && o.tools.definitions || []).some(d => d.annotations && d.annotations.readOnlyHint === false);
+    if (writes && !(o.loginPage && o.loginPage.scopeText)) {
+        throw new Error('createMcpCore: tools that write need loginPage.scopeText saying so (the default says read-only)');
+    }
     const appKey = (o.server && o.server.name) || 'app';
     const jwtSecret = o.jwtSecret || (() => {
         if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is not configured');
@@ -142,4 +147,5 @@ function createMcpCore(o) {
 module.exports = { createMcpCore, ToolError, escapeHtml, clientIp, READ_ONLY_ANNOTATIONS, DEFAULT_LOGIN_PAGE };
 // Mongoose schemas, loaded on first use: an app with its own stores (no
 // mongoose) never needs the peer dependency.
-Object.defineProperty(module.exports, 'schemas', { enumerable: true, get: () => require('./lib/schemas') });
+// Non-enumerable, so spreading or inspecting the exports never loads it.
+Object.defineProperty(module.exports, 'schemas', { enumerable: false, get: () => require('./lib/schemas') });

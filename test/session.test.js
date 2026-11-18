@@ -32,12 +32,13 @@ function build() {
                 const id = req.get('x-session');
                 if (!id) return null;
                 if (id === 'broken') return { error: 'Algo pasó con tu cuenta.' };
+                if (id === 'noid') return { name: 'Sin id', canUseAgentes: true };
                 return people[id] ? { ...people[id] } : null;
             },
             loginUrl: back => `/auth/login?next=${encodeURIComponent(back)}`
         },
         loadPrincipal: async (userId, companyId) => (people[userId] && people[userId].companyId === companyId ? { ...people[userId] } : null),
-        loginPage: { heading: 'Acceso de agentes a Test' },
+        loginPage: { heading: 'Acceso de agentes a Test', scopeText: 'Lee y escribe como tú.' },
         server: { name: 'testapp', version: '1.0.0', instructions: 'test' },
         tools: {
             definitions: [
@@ -76,6 +77,12 @@ test('createMcpCore needs exactly one of authenticate or sessionLogin', () => {
     assert.throws(() => createMcpCore(base), /exactly one/);
     assert.throws(() => createMcpCore({ ...base, authenticate: async () => ({}), sessionLogin: { currentPrincipal() {}, loginUrl() {} } }), /exactly one/);
     assert.throws(() => createMcpCore({ ...base, sessionLogin: {} }), /currentPrincipal/);
+    const writer = { ...base, sessionLogin: { currentPrincipal() {}, loginUrl() {} },
+        tools: { definitions: [{ name: 'w', inputSchema: {}, annotations: { readOnlyHint: false } }], execute: async () => null } };
+    assert.throws(() => createMcpCore(writer), /scopeText/);
+    assert.doesNotThrow(() => createMcpCore({ ...writer, loginPage: { scopeText: 'Puede crear y modificar.' } }));
+    // spreading the exports never loads the optional mongoose schemas
+    assert.ok(!Object.keys({ ...require('..') }).includes('schemas'));
 });
 
 test('no session → app sign-in that comes back to the same authorization; no permission → message, no form', async () => {
@@ -89,11 +96,26 @@ test('no session → app sign-in that comes back to the same authorization; no p
     const back = new URL(loc.searchParams.get('next'), 'http://localhost:3998');
     assert.equal(back.pathname, '/authorize');
     for (const [k, v] of Object.entries(authorizeQuery(client, challenge))) assert.equal(back.searchParams.get(k), v, k);
+    // back from the sign-in and still no session: a message, not another redirect (no loop)
+    r = await request(app).get(back.pathname + back.search);
+    assert.equal(r.status, 401);
+    assert.match(r.text, /No pudimos leer tu sesión/);
+    // ...and with the session, the marker does not get in the way
+    r = await request(app).get(back.pathname + back.search).set('x-session', 'u1');
+    assert.equal(r.status, 200);
+    assert.match(r.text, /Permitir/);
 
     r = await request(app).get('/authorize').query(authorizeQuery(client, challenge)).set('x-session', 'u2');
     assert.equal(r.status, 403);
     assert.match(r.text, /Pídeselo a un administrador/);
     assert.doesNotMatch(r.text, /<form/);
+    // a principal without userId/companyId is the app's bug: refused, never a code on undefined ids
+    r = await request(app).get('/authorize').query(authorizeQuery(client, challenge)).set('x-session', 'noid');
+    assert.equal(r.status, 302);       // the SDK sends the agent back with server_error
+    const err = new URL(r.headers.location);
+    assert.equal(err.origin + err.pathname, REDIRECT);
+    assert.equal(err.searchParams.get('error'), 'server_error');
+    assert.equal(err.searchParams.get('code'), null);
     r = await request(app).get('/authorize').query(authorizeQuery(client, challenge)).set('x-session', 'broken');
     assert.equal(r.status, 403);
     assert.match(r.text, /Algo pasó/);
@@ -124,7 +146,12 @@ test('consent: page escapes, anti-forgery token is bound to person + request, de
     const expired = `${Date.now() - 1}.${form.csrf.split('.')[1]}`;
     assert.equal((await consent({ ...form, csrf: expired, decision: 'allow' })).status, 400);
 
-    let r = await consent({ ...form, decision: 'deny' });
+    // the anti-forgery token is single use: a double click does not mint two codes
+    const first = await consent({ ...form, decision: 'allow' });
+    assert.equal(first.status, 302);
+    assert.equal((await consent({ ...form, decision: 'allow' })).status, 400);
+    const page2 = await request(app).get('/authorize').query(authorizeQuery(client, challenge)).set('x-session', 'u1');
+    let r = await consent({ ...formOf(page2.text), decision: 'deny' });
     assert.equal(r.status, 302);
     let url = new URL(r.headers.location);
     assert.equal(url.origin + url.pathname, REDIRECT);
